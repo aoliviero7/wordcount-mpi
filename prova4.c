@@ -25,6 +25,7 @@ typedef struct{
 void wordCount(int inizio, int inizioFile, int fineFile, int resto, int byteProcess, fileStats* myFiles, int myrank);
 void chunkAndCount(int myrank, int totalByte, fileStats* myFiles, int countFiles, int p);
 int getWord(FILE *file, wchar_t* str);
+int isAccented(wint_t c);
 
 int main(int argc, char** argv) {
 	MPI_Init(NULL, NULL);
@@ -143,11 +144,10 @@ void wordCount(int inizio, int inizioFile, int fineFile, int resto, int byteProc
 					if(countByte<byteProcess){					//non devo leggere di più di quanto mi tocca
 						wchar_t str[100]={};
 						int prima = ftell(file);
-						getWord(file, str);											//prendo una parola
+						if(!getWord(file, str))					//prendo una parola
+							break;											
 						int dopo = ftell(file);
-						printf("prima %d \n",prima);
-						printf("dopo %d \n",dopo);
-						printf("Stringa letta: %ls \n",str);
+						//printf("Stringa letta: %ls \n",str);
 						int salto = 0;												//flag che mi indica se la parola la devo saltare	
 						if(iFile == inizioFile && prima == inizio && inizio!=0){	//se sto leggendo la mia prima parola (prima==inizio) del primo file che mi è stato assegnato (iFile==inizioFile),
 																					//e non mi trovo all'inizio del file (inizio!=0) (NB: rank 0 non lo farà mai dato che il suo inizio=0)
@@ -188,10 +188,10 @@ void wordCount(int inizio, int inizioFile, int fineFile, int resto, int byteProc
 		}
 		MPI_Barrier(MPI_COMM_WORLD);
 		sleep(myrank);
-		printf("Processo: %d \n",myrank);
+		/*printf("Processo: %d \n",myrank);
 		for(int i=0; i<size; i++){
 			printf("Parola: %ls - counts: %d\n",words[i].parola,words[i].count);
-		}
+		}*/
 		free(words);
 	}
 }
@@ -208,12 +208,16 @@ int getWord(FILE *file, wchar_t* str){
 	wint_t c;
 	do{
 		c = fgetwc(file);
-		printf("%lc ",c);
-		if(iswalnum(c) || c==L'è' || c==L'é' || c==L'ù' || c==L'ò' || c==L'ì' || c==L'à')
+		//printf("%lc ",c);
+		if(iswalnum(c) || isAccented(c))
 			str[i++] = c;
-	}while(iswalnum(c) || c==L'è' || c==L'é' || c==L'ù' || c==L'ò' || c==L'ì' || c==L'à');	
+	}while(iswalnum(c) || isAccented(c));	
 	str[i] = '\0';
 	return i;
+}
+
+int isAccented(wint_t c){
+	return (c==L'è' || c==L'é' || c==L'ù' || c==L'ò' || c==L'ì' || c==L'à');
 }
 
 
