@@ -192,6 +192,7 @@ void wordCount(int inizio, int inizioFile, int fineFile, int resto, int byteProc
 		for(int i=0; i<size; i++){
 			printf("Parola: %ls - counts: %d\n",words[i].parola,words[i].count);
 		}*/
+		printf("Processo: %d - dimensione struct: %ld\n",myrank,(size) * sizeof(Word));
 		free(words);
 	}
 }
