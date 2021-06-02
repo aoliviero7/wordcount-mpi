@@ -19,8 +19,13 @@ typedef struct{
 	int count;
 }Word;
 
-Word* wordCount(int inizio, int inizioFile, int fineFile, int resto, int byteProcess, fileStats* myFiles, int myrank, int *size);
-Word* chunkAndCount(int myrank, int totalByte, fileStats* myFiles, int countFiles, int p, int* size);
+typedef struct{
+	Word* words;
+	int size;
+}WordHead;
+
+WordHead wordCount(int inizio, int inizioFile, int fineFile, int resto, int byteProcess, fileStats* myFiles, int myrank);
+WordHead chunkAndCount(int myrank, int totalByte, fileStats* myFiles, int countFiles, int p);
 int getWord(FILE *file, char* str);
 
 int main(int argc, char** argv) {
@@ -69,13 +74,21 @@ int main(int argc, char** argv) {
 	else
 		printf("Directory non leggibile\n");
 	closedir(directory);
-	int size = 0;
-	Word *words = chunkAndCount(myrank, totalByte, myFiles, countFiles, p, &size);
-	for(int i=0; i<size; i++)
-		printf("Parola: %s - counts: %d\n",words[i].parola,words[i].count);
+	//int size = 0;
+	WordHead whead = chunkAndCount(myrank, totalByte, myFiles, countFiles, p);
+	/*for(int i=0; i<whead.size; i++)
+		printf("Parola: %s - counts: %d\n",whead.words[i].parola,whead.words[i].count);*/
+	int *sizeReicv;
+	sizeReicv = (int *) malloc(p * sizeof(int));
+	//MPI_Barrier(MPI_COMM_WORLD);
+	//printf("Dimensione: %d - rank: %d\n",whead.size,myrank);
+	MPI_Allgather(&whead.size, 1, MPI_INT, sizeReicv, 1, MPI_INT, MPI_COMM_WORLD);
+	if(myrank==0){
+		for(int i=0; i<p; i++)
+			printf("[MASTER] Dimensione: %d - rank: %d\n",sizeReicv[i],i);
+	}
 	
-
-	MPI_Datatype Wordtype, oldtypes[2], parolatype;   	//variabili richieste per l'invio
+	MPI_Datatype wordtype, oldtypes[2], parolatype, wheadtype;   	//variabili richieste per l'invio
     int blockcounts[2];
     MPI_Aint offsets[2], lb, extent;
 	MPI_Type_contiguous(100, MPI_CHAR, &parolatype);
@@ -87,16 +100,56 @@ int main(int argc, char** argv) {
     offsets[1] = 1 * extent;
     oldtypes[1] = MPI_INT;
     blockcounts[1] = 2;
-    MPI_Type_create_struct(2, blockcounts, offsets, oldtypes, &Wordtype);	//definizione struttura
-    MPI_Type_commit(&Wordtype);
-	int typeSize;
-    MPI_Type_size(Wordtype, &typeSize);					//dimensione tipo
+    MPI_Type_create_struct(2, blockcounts, offsets, oldtypes, &wordtype);	//definizione struttura Word
+    MPI_Type_commit(&wordtype);
+	/*
+	//int typeSize;
+    //MPI_Type_size(wordtype, &typeSize);				//dimensione tipo
     //printf("size %d\n",size);
-    
+	offsets[0] = 0;										//setup *Words
+    oldtypes[0] = wordtype;
+    blockcounts[0] = 1;
+    MPI_Type_get_extent(wordtype, &lb, &extent);		//setup size
+    offsets[1] = 1 * extent;
+    oldtypes[1] = MPI_INT;
+    blockcounts[1] = 2;
+	MPI_Type_create_struct(2, blockcounts, offsets, oldtypes, &wheadtype);	//definizione struttura WordHead
+    MPI_Type_commit(&wheadtype);
+	*/
+
+	WordHead *wheadReicv;
+	wheadReicv = (WordHead *) malloc(p * sizeof(WordHead));
+	int *displacements;
+	displacements = (int *) malloc(p * sizeof(int));
+	for(int i=0; i<p; i++){
+		displacements[i] = (i==0) ? 0 : displacements[i-1] + sizeReicv[i-1];
+		wheadReicv->size = sizeReicv[i];
+		printf("Processo: %d - size: %d\n",i,wheadReicv->size);
+		wheadReicv->words = (Word *) malloc(wheadReicv->size * sizeof(Word));
+	}
+	if(myrank==0)
+		for(int i=0; i<p; i++)
+			printf("[MASTER] displacements[%d]: %d\n",i,displacements[i]);
+
+	MPI_Gatherv(whead.words, whead.size, wordtype, wheadReicv->words, sizeReicv, displacements, wordtype, 0, MPI_COMM_WORLD);
+	//MPI_Gather(&whead, 1, wheadtype, wheadReicv, 1, wheadtype, 0, MPI_COMM_WORLD);
+	/*if(myrank==0){
+		for(int i=0; i<p; i++){
+			printf("Processo: %d - size: %d\n",i,wheadReicv->size);
+			for(int j=0; j<wheadReicv[i].size; j++){
+				printf("Parola: %s - counts: %d\n",wheadReicv[i].words[j].parola,wheadReicv[i].words[j].count);
+			}
+		}
+	}*/
 
 
-
-	free(words);
+	MPI_Type_free(&parolatype);
+    MPI_Type_free(&wordtype);
+	//MPI_Type_free(&wheadtype);
+   	free(sizeReicv);
+	free(displacements);
+	free(wheadReicv);
+	//free(words);
 	free(myFiles);
 	MPI_Finalize();
 }
@@ -107,7 +160,7 @@ int main(int argc, char** argv) {
 	Es: il processo 3 lavora dal byte 400 del file 5 fino al byte 150 del file 7
 	Dopodiché viene chiamato il metodo wordCount
 */
-Word* chunkAndCount(int myrank, int totalByte, fileStats* myFiles, int countFiles, int p, int *size){
+WordHead chunkAndCount(int myrank, int totalByte, fileStats* myFiles, int countFiles, int p){
 	int resto = totalByte % p;
 	int byteProcess = totalByte / p;																		
 	int inizio = (myrank<resto) ? (byteProcess + 1) * myrank : resto + (byteProcess * myrank);				//da che byte parto (riferito ai byte totali da elaborare)
@@ -132,18 +185,18 @@ Word* chunkAndCount(int myrank, int totalByte, fileStats* myFiles, int countFile
 	}
 	printf("Processore: %d, File inizio: %d, Byte: %d - File fine: %d, Byte: %d\n",myrank,inizioFile,inizio,fineFile,fine);
 	
-	return wordCount(inizio, inizioFile, fineFile, resto, byteProcess, myFiles, myrank, size);
+	return wordCount(inizio, inizioFile, fineFile, resto, byteProcess, myFiles, myrank);
 }
 
 
 /*
 	Qui ogni processo si calcola la frequenza delle parole delle porzioni dei file che gli spettano
 */
-Word* wordCount(int inizio, int inizioFile, int fineFile, int resto, int byteProcess, fileStats* myFiles, int myrank, int* size){
+WordHead wordCount(int inizio, int inizioFile, int fineFile, int resto, int byteProcess, fileStats* myFiles, int myrank){
 	DIR *directory;
 	FILE *file;
 	struct dirent *Dirent;
-	int countByte = 0;
+	int countByte = 0, size = 0;
 	Word* words;
 	words = (Word*) malloc(sizeof(Word));
 	byteProcess = (myrank<resto) ? byteProcess + 1 : byteProcess;
@@ -182,7 +235,7 @@ Word* wordCount(int inizio, int inizioFile, int fineFile, int resto, int bytePro
 							continue;							//vado alla prossima iterazione perché la parola è già stata analizzata
 						
 						int flag = 0, i = 0;
-						for(i=0; i<*size; i++){					//cerco nell'array se è già presente la parola
+						for(i=0; i<size; i++){					//cerco nell'array se è già presente la parola
 							if(!strcmp(str, words[i].parola)){	//se le parole sono uguali
 								flag = 1;						//setto il flag a true
 								break;							
@@ -191,10 +244,10 @@ Word* wordCount(int inizio, int inizioFile, int fineFile, int resto, int bytePro
 						if(flag)								//flag = 1
 							words[i].count++;					//la parola esiste già e incremento il suo contatore
 						else{									//flag = 0
-							*size=*size+1;								//incremento la size e aggiungo gli elementi agli array
-							words = (Word*) realloc(words, (*size) * sizeof(Word));
-							strcpy(words[*size-1].parola, str);
-							words[*size-1].count = 1;
+							size=size+1;								//incremento la size e aggiungo gli elementi agli array
+							words = (Word*) realloc(words, (size) * sizeof(Word));
+							strcpy(words[size-1].parola, str);
+							words[size-1].count = 1;
 						}
 					}else
 						break;
@@ -204,12 +257,16 @@ Word* wordCount(int inizio, int inizioFile, int fineFile, int resto, int bytePro
 		}
 		MPI_Barrier(MPI_COMM_WORLD);
 		sleep(myrank);
-		printf("Processo: %d \n",myrank);
-		/*for(int i=0; i<*size; i++){
+		/*printf("Processo: %d \n",myrank);
+		for(int i=0; i<size; i++){
 			printf("Parola: %s - counts: %d\n",words[i].parola,words[i].count);
 		}*/
-		printf("Processo: %d - dimensione struct: %ld\n",myrank,(*size) * sizeof(Word));
-		return words;
+		//printf("Processo: %d - dimensione struct: %ld\n",myrank,(*size) * sizeof(Word));
+
+		WordHead whead;
+		whead.words = words;
+		whead.size = size;
+		return whead;
 	}
 }
 
@@ -225,7 +282,7 @@ int getWord(FILE *file, char* str){
 	char c;
 	do{
 		c = fgetc(file);
-		printf("%c ",c);
+		//printf("%c ",c);
 		if(isalnum(c))
 			str[i++] = tolower(c);
 	}while(isalnum(c));	

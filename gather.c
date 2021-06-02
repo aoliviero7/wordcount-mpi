@@ -1,5 +1,7 @@
-#include "mpi.h"
+#include <mpi.h>
 #include <stdio.h>
+#include <unistd.h>
+#include <time.h>
 
 int main(int argc, char *argv[])
 {
@@ -16,6 +18,11 @@ int main(int argc, char *argv[])
     {
         buffer[i] = rank;
     }
+    sleep(rank);
+    printf("rank %d.\n", rank);
+    for (i=0; i<rank; i++)
+        printf("[%d]", buffer[i]);
+    
     MPI_Gatherv(buffer, rank, MPI_INT, buffer, receive_counts, receive_displacements, MPI_INT, 0, MPI_COMM_WORLD);
     if (rank == 0)
     {
