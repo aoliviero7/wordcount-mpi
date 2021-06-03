@@ -10,7 +10,7 @@
 #include <wctype.h>
 #include <locale.h>
 
-#define NELEM 25
+#define NELEM 12500
 
 int main(int argc, char *argv[])  {
     int numtasks=0, rank, source=0, dest, tag=1, i;
@@ -54,24 +54,22 @@ int main(int argc, char *argv[])  {
     MPI_Type_create_struct(2, blockcounts, offsets, oldtypes, &Wordtype);
     MPI_Type_commit(&Wordtype);
 
+    printf("hi \n");
+    for (i=0; i<NELEM; i++) {
+        strcpy(Words[i].parola , "pippo");
+        //printf("hi %d\n",i);
+        Words[i].count = i * 10;
+    }
     
-
-    
-        printf("hi \n");
-        for (i=0; i<NELEM; i++) {
-            strcpy(Words[i].parola , "pippo");
-            //printf("hi %d\n",i);
-            Words[i].count = i * 10;
-        }
-        
-        printf("rank %d ora invio\n",rank);
+    printf("rank %d ora invio\n",rank);
     
     
     int size;
     MPI_Type_size(Wordtype, &size);
     //printf("size %d\n",size);
     char message[NELEM * size]; 
-    char p[numtasks][NELEM * size];
+    char p[numtasks * NELEM * size];
+    //Word recv[numtasks * NELEM];
     Word recv[numtasks][NELEM];
     /*p=calloc(numtasks, sizeof(char*));
     if(p==NULL)
@@ -82,16 +80,22 @@ int main(int argc, char *argv[])  {
             printf("null 2\n");
     }*/
 
+    
     int position = 0;
     for (i=0; i<NELEM; i++) 
         MPI_Pack(&Words[i], 1, Wordtype, message, NELEM *size, &position, MPI_COMM_WORLD);
 
-    MPI_Gather(message, NELEM*size, MPI_PACKED, &p[0][0], NELEM*size, MPI_PACKED, 0, MPI_COMM_WORLD);
+    MPI_Gather(message, NELEM*size, MPI_PACKED, p, NELEM*size, MPI_PACKED, 0, MPI_COMM_WORLD);
     
     position = 0;
-    for (i=0; i<numtasks; i++)
-        //for (int j=0; j<NELEM; j++) 
-            MPI_Unpack(p[i], NELEM * size, &position, &recv[i], 1, Wordtype, MPI_COMM_WORLD);
+    for (i=0; i<numtasks; i++){
+        position = 0;
+        for (int j=0; j<NELEM; j++) 
+            MPI_Unpack(p, NELEM * size, &position, &recv[i][j], 1, Wordtype, MPI_COMM_WORLD);
+    }
+
+    //MPI_Gather(Words, NELEM, Wordtype, recv, NELEM, Wordtype, 0, MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_WORLD);
     
     if(rank==0)
         for (i=0; i<numtasks; i++) 

@@ -22,127 +22,84 @@ typedef struct{
 Word* wordCount(int inizio, int inizioFile, int fineFile, int resto, int byteProcess, fileStats* myFiles, int myrank,int *size);
 Word* chunkAndCount(int myrank, int totalByte, fileStats* myFiles, int countFiles, int p, int *size);
 int getWord(FILE *file, char* str);
+int indexOf(Word *words, char* str, int size);
+fileStats* fileScan(int* countFiles, int* totalByte);
 
 int main(int argc, char** argv) {
-	MPI_Init(NULL, NULL);
+	MPI_Init(NULL, NULL);			//inizializzo MPI
     int myrank,p=0;
     MPI_Status status;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &p);
 
-	DIR *directory;
-	FILE *file;
-	struct dirent *Dirent;
-	fileStats *myFiles;
-	int *fileByte;
 	int countFiles = 0, totalByte = 0;
+	fileStats *myFiles = fileScan(&countFiles, &totalByte);								//calcolo numero di file e dimensioni
+	printf("count file %d, totalB %d\n", countFiles, totalByte);
+	if(myrank==0)
+		for(int i=0; i<countFiles; i++)
+			printf("Nome file %d: %s, Byte %d\n", i, myFiles[i].name, myFiles[i].size);
 	
-	directory = opendir(FOLDER);
-	if(directory){
-		while(Dirent=readdir(directory))								//conto i file
-			countFiles++;
-		seekdir(directory, 0);
-		myFiles = (fileStats*) malloc(sizeof(fileStats) * countFiles);	//alloco la struttura con il numero dei file
-		countFiles = 0;
-		while(Dirent=readdir(directory)){
-			char filepath[100] = FOLDER;
-			strcat(filepath, "/");
-			strcat(filepath, Dirent->d_name);
-			//printf("Filepath: %s\n",filepath);
-			if(Dirent->d_type==8){										//regoular file
-				file = fopen(filepath, "r");							//accedo in lettura
-				strcpy(myFiles[countFiles].name,Dirent->d_name);		//salvo il nome
-				//printf("Filename: %s\n",Dirent->d_name);
-				if(file){									
-					fseek(file, 0L, SEEK_END);							//conto i byte dei file posizionandomi alla fine
-					myFiles[countFiles].size = ftell(file);				//salvo la dimensione
-					totalByte += myFiles[countFiles++].size;			//aggiorno il contatore totale dei byte
-				}
-				fclose(file);
-			}
-		}
-		if(myrank==0){
-			for(int i=0; i<countFiles; i++)
-				printf("Nome file %d: %s, Byte %d\n", i, myFiles[i].name, myFiles[i].size);
-		}
-	}
-	else
-		printf("Directory non leggibile\n");
-	closedir(directory);
-	int size = 0;
-	Word* words = chunkAndCount(myrank, totalByte, myFiles, countFiles, p, &size);
-	/*for(int i=0; i<whead.size; i++)
-		printf("Parola: %s - counts: %d\n",whead.words[i].parola,whead.words[i].count);*/
-	int *sizeReicv;
-	sizeReicv = (int *) malloc(p * sizeof(int));
-	//MPI_Barrier(MPI_COMM_WORLD);
-	//printf("Dimensione: %d - rank: %d\n",whead.size,myrank);
-	MPI_Allgather(&size, 1, MPI_INT, sizeReicv, 1, MPI_INT, MPI_COMM_WORLD);
+	int size = 0;																		//dimensione dell'array di Word che calcolerò
+	Word* words = chunkAndCount(myrank, totalByte, myFiles, countFiles, p, &size);		//calcolo l'array di word
+	int sizeRecv[p], sizeTotal = 0, max = 0;
+	MPI_Gather(&size, 1, MPI_INT, sizeRecv, 1, MPI_INT, 0, MPI_COMM_WORLD);				//comunico al master le dimensioni di ogni array di Word locale
 	if(myrank==0){
-		for(int i=0; i<p; i++)
-			printf("[MASTER] Dimensione: %d - rank: %d\n",sizeReicv[i],i);
+		for(int i=0; i<p; i++){
+			printf("[MASTER] Dimensione: %d - rank: %d\n",sizeRecv[i],i);
+			sizeTotal += sizeRecv[i];
+			if(sizeRecv[i]>max)
+				max = sizeRecv[i];
+		}
 	}
 	
-	MPI_Datatype wordtype, oldtypes[2], parolatype;   	//variabili richieste per l'invio
+	MPI_Datatype wordtype, oldtypes[2], parolatype;   									//variabili richieste per la struttura
     int blockcounts[2];
     MPI_Aint offsets[2], lb, extent;
 	MPI_Type_contiguous(100, MPI_CHAR, &parolatype);
     MPI_Type_commit(&parolatype);
-    offsets[0] = 0;										//setup parola
+    offsets[0] = 0;																		//setup parola
     oldtypes[0] = parolatype;
     blockcounts[0] = 1;
-    MPI_Type_get_extent(parolatype, &lb, &extent);		//setup count
+    MPI_Type_get_extent(parolatype, &lb, &extent);										//setup count
     offsets[1] = extent;
     oldtypes[1] = MPI_INT;
     blockcounts[1] = 2;
-    MPI_Type_create_struct(2, blockcounts, offsets, oldtypes, &wordtype);	//definizione struttura Word
+    MPI_Type_create_struct(2, blockcounts, offsets, oldtypes, &wordtype);				//definizione struttura Word
     MPI_Type_commit(&wordtype);
-	/*
-	int dim;
-    MPI_Type_size(wordtype, &dim);
-    printf("dim %d\n",dim);
-	offsets[0] = 0;										//setup *Words
-    oldtypes[0] = wordtype;
-    blockcounts[0] = 1;
-    MPI_Type_get_extent(wordtype, &lb, &extent);		//setup size
-    offsets[1] = 1 * extent;
-    oldtypes[1] = MPI_INT;
-    blockcounts[1] = 2;
-	MPI_Type_create_struct(2, blockcounts, offsets, oldtypes, &wheadtype);	//definizione struttura WordHead
-    MPI_Type_commit(&wheadtype);
-	*/
+	
+	int sizeWord;								
+    MPI_Type_size(wordtype, &sizeWord);													//dimensione di una singola Word
 
-	Word *wordsReicv[p];
-	int *displacements;
-	displacements = (int *) malloc(p * sizeof(int));
-	for(int i=0; i<p; i++){
-		displacements[i] = (i==0) ? 0 : displacements[i-1] + sizeReicv[i-1];
-		//printf("Processo: %d - size: %d\n",i,sizeReicv[i]);
-		wordsReicv[i] = (Word *) malloc(sizeReicv[i] * sizeof(Word));
-	}/*
-	if(myrank==0)
-		for(int i=0; i<p; i++)
-			printf("[MASTER] displacements[%d]: %d\n",i,displacements[i]);
-			*/
-
-	MPI_Gatherv(words, size, wordtype, *wordsReicv, sizeReicv, displacements, wordtype, 0, MPI_COMM_WORLD);
-	//MPI_Gather(&whead, 1, wheadtype, wheadReicv, 1, wheadtype, 0, MPI_COMM_WORLD);
+	char sendMessage[size * sizeWord];													//pacchetto che ogni processo invia al master
+	char recvMessage[sizeTotal * sizeWord];												//pacchetto che riceve il master (pacchetti singoli concatenati)
+	Word wordsRecv[p][max];																//array degli istogrammi locali dei processi
+	int displacements[p], sizeMessage[p], sizeMessageRecv = 0, position = 0;			//variabili richieste per l'invio
 	if(myrank==0){
+		for(int i=0; i<p; i++){															//il master calcola indici e dimensioni
+			sizeMessage[i] = sizeRecv[i] * sizeWord;
+			sizeMessageRecv += sizeMessage[i];
+			displacements[i] = (i==0) ? 0 : displacements[i-1] + sizeMessage[i-1];
+		}
+	}
+    for (int i=0; i<size; i++) 															//ogni processo fa MPI_Pack dei suoi dati calcolati
+        MPI_Pack(&words[i], 1, wordtype, sendMessage, sizeWord*size, &position, MPI_COMM_WORLD);
+	
+	MPI_Gatherv(sendMessage, sizeWord*size, MPI_PACKED, recvMessage, sizeMessage, displacements, MPI_PACKED, 0, MPI_COMM_WORLD);	//si inviano tutti i dati al master
+	if(myrank==0){
+		position = 0;
+		for (int i=0; i<p; i++)
+			for (int j=0; j<sizeRecv[i]; j++) 
+				MPI_Unpack(recvMessage, sizeMessageRecv, &position, &wordsRecv[i][j], 1, wordtype, MPI_COMM_WORLD);					//il master spacchetta tutti i dati
 		for(int i=0; i<p; i++){
 			printf("Processo: %d\n",i);
-			for(int j=0; j<sizeReicv[i]; j++){
-				printf("Parola: %s - counts: %d\n",wordsReicv[i][j].parola,wordsReicv[i][j].count);
+			for(int j=0; j<sizeRecv[i]; j++){
+				printf("Parola: %s - counts: %d\n",wordsRecv[i][j].parola,wordsRecv[i][j].count);
 			}
 		}
 	}
 
-
 	MPI_Type_free(&parolatype);
     MPI_Type_free(&wordtype);
-	//MPI_Type_free(&wheadtype);
-   	free(sizeReicv);
-	free(displacements);
-	free(wordsReicv);
 	free(words);
 	free(myFiles);
 	MPI_Finalize();
@@ -228,17 +185,12 @@ Word* wordCount(int inizio, int inizioFile, int fineFile, int resto, int bytePro
 						if(salto)								//se non devo leggere la parola
 							continue;							//vado alla prossima iterazione perché la parola è già stata analizzata
 						
-						int flag = 0, i = 0;
-						for(i=0; i<*size; i++){					//cerco nell'array se è già presente la parola
-							if(!strcmp(str, words[i].parola)){	//se le parole sono uguali
-								flag = 1;						//setto il flag a true
-								break;							
-							}
-						}
-						if(flag)								//flag = 1
-							words[i].count++;					//la parola esiste già e incremento il suo contatore
-						else{									//flag = 0
-							*size=*size+1;								//incremento la size e aggiungo gli elementi agli array
+						int flag = 0;
+						int i = indexOf(words, str, *size);		//cerco nell'array se è già presente la parola
+						if(i!=-1)								
+							words[i].count++;					//se sì, incremento il suo contatore
+						else{									
+							*size=*size+1;						//se no, incremento la size e aggiungo gli elementi agli array
 							words = (Word*) realloc(words, (*size) * sizeof(Word));
 							strcpy(words[*size-1].parola, str);
 							words[*size-1].count = 1;
@@ -281,5 +233,51 @@ int getWord(FILE *file, char* str){
 	return i;
 }
 
+int indexOf(Word *words, char* str, int size){
+	for(int i=0; i<size; i++)					//cerco nell'array se è già presente la parola
+		if(!strcmp(str, words[i].parola))		//se le parole sono uguali
+			return i;							//restituisco l'indice
+	return -1;
+}
 
+
+/*
+	Qui vengono calcolati i byte totali dei file da esaminare, il numero totale dei file
+	e nell'array di fileStats restituito si inserisce per ogli file il suo nome e la sua dimensione.
+*/
+fileStats* fileScan(int* countFiles, int* totalByte){
+	DIR *directory;
+	FILE *file;
+	struct dirent *Dirent;
+	int *fileByte;
+	fileStats* myFiles;
+	directory = opendir(FOLDER);
+	if(directory){
+		while(Dirent=readdir(directory))									//conto i file
+			*countFiles = *countFiles + 1;
+		seekdir(directory, 0);
+		myFiles = (fileStats*) malloc(sizeof(fileStats) * (*countFiles));	//alloco la struttura con il numero dei file
+		*countFiles = 0;
+		while(Dirent=readdir(directory)){
+			char filepath[100] = FOLDER;
+			strcat(filepath, "/");
+			strcat(filepath, Dirent->d_name);
+			if(Dirent->d_type==8){											//regoular file
+				file = fopen(filepath, "r");								//accedo in lettura
+				strcpy(myFiles[*countFiles].name,Dirent->d_name);			//salvo il nome
+				if(file){									
+					fseek(file, 0L, SEEK_END);								//conto i byte dei file posizionandomi alla fine
+					myFiles[*countFiles].size = ftell(file);				//salvo la dimensione
+					*totalByte = *totalByte + myFiles[*countFiles].size;	//aggiorno il contatore totale dei byte
+					*countFiles = *countFiles + 1;
+				}
+				fclose(file);
+			}
+		}
+	}
+	else
+		printf("Directory non leggibile\n");
+	closedir(directory);
+	return myFiles;
+}
 

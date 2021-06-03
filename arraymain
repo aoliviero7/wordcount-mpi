@@ -1,0 +1,121 @@
+	MPI_Init(NULL, NULL);
+    int myrank,p=0;
+    MPI_Status status;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    MPI_Comm_size(MPI_COMM_WORLD, &p);
+
+	DIR *directory;
+	FILE *file;
+	struct dirent *Dirent;
+	fileStats *myFiles;
+	int *fileByte;
+	int countFiles = 0, totalByte = 0;
+	
+	directory = opendir(FOLDER);
+	if(directory){
+		while(Dirent=readdir(directory))								//conto i file
+			countFiles++;
+		seekdir(directory, 0);
+		myFiles = (fileStats*) malloc(sizeof(fileStats) * countFiles);	//alloco la struttura con il numero dei file
+		countFiles = 0;
+		while(Dirent=readdir(directory)){
+			char filepath[100] = FOLDER;
+			strcat(filepath, "/");
+			strcat(filepath, Dirent->d_name);
+			//printf("Filepath: %s\n",filepath);
+			if(Dirent->d_type==8){										//regoular file
+				file = fopen(filepath, "r");							//accedo in lettura
+				strcpy(myFiles[countFiles].name,Dirent->d_name);		//salvo il nome
+				//printf("Filename: %s\n",Dirent->d_name);
+				if(file){									
+					fseek(file, 0L, SEEK_END);							//conto i byte dei file posizionandomi alla fine
+					myFiles[countFiles].size = ftell(file);				//salvo la dimensione
+					totalByte += myFiles[countFiles++].size;			//aggiorno il contatore totale dei byte
+				}
+				fclose(file);
+			}
+		}
+		if(myrank==0){
+			for(int i=0; i<countFiles; i++)
+				printf("Nome file %d: %s, Byte %d\n", i, myFiles[i].name, myFiles[i].size);
+		}
+	}
+	else
+		printf("Directory non leggibile\n");
+	closedir(directory);
+	int size = 0;
+	Word* words = chunkAndCount(myrank, totalByte, myFiles, countFiles, p, &size);
+	/*for(int i=0; i<whead.size; i++)
+		printf("Parola: %s - counts: %d\n",whead.words[i].parola,whead.words[i].count);*/
+	int *sizeRecv, sizeTotal = 0;
+	sizeRecv = (int *) malloc(p * sizeof(int));
+	//MPI_Barrier(MPI_COMM_WORLD);
+	//printf("Dimensione: %d - rank: %d\n",whead.size,myrank);
+	MPI_Allgather(&size, 1, MPI_INT, sizeRecv, 1, MPI_INT, MPI_COMM_WORLD);
+	if(myrank==0){
+		for(int i=0; i<p; i++){
+			printf("[MASTER] Dimensione: %d - rank: %d\n",sizeRecv[i],i);
+			sizeTotal += sizeRecv[i];
+		}
+	}
+	
+	MPI_Datatype wordtype, oldtypes[2], parolatype;   	//variabili richieste per l'invio
+    int blockcounts[2];
+    MPI_Aint offsets[2], lb, extent;
+	MPI_Type_contiguous(100, MPI_CHAR, &parolatype);
+    MPI_Type_commit(&parolatype);
+    offsets[0] = 0;										//setup parola
+    oldtypes[0] = parolatype;
+    blockcounts[0] = 1;
+    MPI_Type_get_extent(parolatype, &lb, &extent);		//setup count
+    offsets[1] = extent;
+    oldtypes[1] = MPI_INT;
+    blockcounts[1] = 2;
+    MPI_Type_create_struct(2, blockcounts, offsets, oldtypes, &wordtype);	//definizione struttura Word
+    MPI_Type_commit(&wordtype);
+	
+	int sizeWord;
+    MPI_Type_size(wordtype, &sizeWord);
+
+	char sendMessage[size * sizeWord];
+	char recvMessage[sizeTotal * sizeWord];
+	Word *wordsRecv;
+	wordsRecv = (Word *) malloc((p * sizeTotal) * sizeof(Word));
+	int displacements[p], sizeMessage[p];
+	if(myrank==0){
+		for(int i=0; i<p; i++){
+			sizeMessage[i] = sizeRecv[i] * sizeWord;
+			displacements[i] = (i==0) ? 0 : displacements[i-1] + sizeMessage[i-1];
+			//printf("Processo: %d - size: %d\n",i,sizeRecv[i]);
+			//wordsRecv[i] = (Word *) malloc(sizeRecv[i] * sizeof(Word));
+		}
+	}/*
+	if(myrank==0)
+		for(int i=0; i<p; i++)
+			printf("[MASTER] displacements[%d]: %d\n",i,displacements[i]);
+			*/
+	int position = 0;
+    for (int i=0; i<size; i++) 
+        MPI_Pack(&words[i], 1, wordtype, sendMessage, sizeWord*size, &position, MPI_COMM_WORLD);
+
+	MPI_Gatherv(sendMessage, sizeWord*size, MPI_PACKED, recvMessage, sizeMessage, displacements, MPI_PACKED, 0, MPI_COMM_WORLD);
+	//MPI_Gather(message, NELEM*size, MPI_PACKED, p, NELEM*size, MPI_PACKED, 0, MPI_COMM_WORLD);
+	if(myrank==0){
+		position = 0;
+		for (int i=0; i<p; i++){
+			position = 0;
+			printf("sto qui - sizeRecv[i]: %d\n",sizeRecv[i]);
+			//wordsRecv[i] = (Word *) malloc(sizeRecv[i] * sizeof(Word));
+			for (int j=0; j<sizeRecv[i]; j++){ 
+				int dim = (i==0) ? 0+j : i*sizeRecv[i-1]+j;
+				MPI_Unpack(recvMessage, sizeMessage[i], &position, &wordsRecv[dim], 1, wordtype, MPI_COMM_WORLD);
+			}
+		}
+		printf("Fine\n");
+		for(int i=0; i<sizeTotal; i++){
+			printf("Processo: %d\n",i);
+			//for(int j=0; j<sizeRecv[i]; j++){
+				printf("Parola: %s - counts: %d\n",wordsRecv[i].parola,wordsRecv[i].count);
+			//}
+		}
+	}
