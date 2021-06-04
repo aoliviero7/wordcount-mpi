@@ -2,10 +2,21 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <sys/time.h>
+#include <unistd.h>
+#include <time.h>
 #include <dirent.h>
+#include <ctype.h>
+#include <sys/time.h>
 
-#define FOLDER "txt"
+#define FOLDER "txt/try"
+
+typedef struct{
+	char parola[100];
+	int count;
+}Word;
+
+int indexOf(Word *words, char* str, int size);
+int getWord(FILE *file, char* str);
 
 int main(int argc, char** argv) {
 	struct timeval start;
@@ -15,11 +26,9 @@ int main(int argc, char** argv) {
 	DIR *directory;
 	FILE *file;
 	struct dirent *Dirent;
-	char **parole;
-	int *count;
+	Word* words;
+	words = (Word*) malloc(sizeof(Word));
 	int size = 0;
-	count = (int*) malloc(sizeof(int));
-	parole = (char**) malloc(sizeof(char*));
 	
 	directory = opendir(FOLDER);
 	if(directory){
@@ -31,45 +40,57 @@ int main(int argc, char** argv) {
 			if(Dirent->d_type==8){
 				file = fopen(filepath, "r");
 				printf("Filename: %s\n",Dirent->d_name);
-				if(file){
-					char str[100];									
+				if(file){									
 					while(!feof(file)){							//scansiono il file
-						fscanf(file,"%s \n", str);				//prendo una parola
+						char str[100]={};
+						if(!getWord(file, str))					//prendo una parola	
+							continue;
 						
 						int index = 0;
-						int flag = 0;
-						for(int i=0; i<size; i++){				//cerco nell'array se è già presente la parola
-							if(!strcmp(str, parole[i])){		//se le parole sono uguali
-								flag = 1;						//setto il flag a true
-								index = i;						//mi salvo l'indice della parola
-							}
-						}
-						if(flag)								//flag = 1
-							count[index]++;						//la parola esiste già e incremento il suo contatore
-						else{									//flag = 0
-							size++;								//incremento la size e aggiungo gli elementi agli array
-							parole = (char**) realloc(parole, size * sizeof(char*));
-							parole[size-1] = (char*) malloc(100 * sizeof(char));
-							count = (int*) realloc(count, size * sizeof(int));
-							strcpy(parole[size-1], str);
-							count[size-1] = 1;
+						int i = indexOf(words, str, size);		//cerco nell'array se è già presente la parola
+						if(i!=-1)								
+							words[i].count++;					//se sì, incremento il suo contatore
+						else{									
+							size++;								//se no, incremento la size e aggiungo gli elementi agli array
+							words = (Word*) realloc(words, (size) * sizeof(Word));
+							strcpy(words[size-1].parola, str);
+							words[size-1].count = 1;
 						}
 					}
 				}
 				fclose(file);
 			}
 		}
-		/*for(int i=0; i<size; i++){
-			printf("Parola: %s - counts: %d\n",parole[i],count[i]);
-		}*/
-		free(parole);
-		free(count);
+		for(int i=0; i<size; i++){
+			printf("Parola: %s - counts: %d\n",words[i].parola,words[i].count);
+		}
 	}
 	else
 		printf("Directory non leggibile\n");
+	free(words);
 	closedir(directory);
 	gettimeofday(&end, 0);
 	elapsed = (end.tv_sec - start.tv_sec) * 1000.0f + (end.tv_usec - start.tv_usec) / 1000.0f;
 	printf("Code executed in %.2f milliseconds.\n", elapsed);
+}
+
+int indexOf(Word *words, char* str, int size){
+	for(int i=0; i<size; i++)					//cerco nell'array se è già presente la parola
+		if(!strcmp(str, words[i].parola))		//se le parole sono uguali
+			return i;							//restituisco l'indice
+	return -1;
+}
+
+int getWord(FILE *file, char* str){
+	int i=0;
+	char c;
+	do{
+		c = fgetc(file);
+		//printf("%c ",c);
+		if(isalnum(c))
+			str[i++] = tolower(c);
+	}while(isalnum(c));	
+	str[i] = '\0';
+	return i;
 }
 

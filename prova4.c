@@ -6,6 +6,7 @@
 #include <time.h>
 #include <dirent.h>
 #include <ctype.h>
+#include <sys/time.h>
 
 #define FOLDER "txt/try"
 
@@ -26,6 +27,14 @@ int indexOf(Word *words, char* str, int size);
 fileStats* fileScan(int* countFiles, int* totalByte);
 
 int main(int argc, char** argv) {
+	struct timeval start;
+   	struct timeval end;
+   	float elapsed;
+	gettimeofday(&start, 0);
+
+
+
+
 	MPI_Init(NULL, NULL);			//inizializzo MPI
     int myrank,p=0;
     MPI_Status status;
@@ -34,7 +43,7 @@ int main(int argc, char** argv) {
 
 	int countFiles = 0, totalByte = 0;
 	fileStats *myFiles = fileScan(&countFiles, &totalByte);								//calcolo numero di file e dimensioni
-	printf("count file %d, totalB %d\n", countFiles, totalByte);
+	//printf("count file %d, totalB %d\n", countFiles, totalByte);
 	if(myrank==0)
 		for(int i=0; i<countFiles; i++)
 			printf("Nome file %d: %s, Byte %d\n", i, myFiles[i].name, myFiles[i].size);
@@ -83,25 +92,60 @@ int main(int argc, char** argv) {
 	}
     for (int i=0; i<size; i++) 															//ogni processo fa MPI_Pack dei suoi dati calcolati
         MPI_Pack(&words[i], 1, wordtype, sendMessage, sizeWord*size, &position, MPI_COMM_WORLD);
-	
+	free(words);
 	MPI_Gatherv(sendMessage, sizeWord*size, MPI_PACKED, recvMessage, sizeMessage, displacements, MPI_PACKED, 0, MPI_COMM_WORLD);	//si inviano tutti i dati al master
+	Word *wordsTotal;
+	int totalWords = 0;
 	if(myrank==0){
+		wordsTotal = (Word *) malloc(sizeof(Word));
+		int dim = 0, index = 0;
 		position = 0;
-		for (int i=0; i<p; i++)
-			for (int j=0; j<sizeRecv[i]; j++) 
+		for (int i=0; i<p; i++){
+			for (int j=0; j<sizeRecv[i]; j++){
 				MPI_Unpack(recvMessage, sizeMessageRecv, &position, &wordsRecv[i][j], 1, wordtype, MPI_COMM_WORLD);					//il master spacchetta tutti i dati
-		for(int i=0; i<p; i++){
+				totalWords+=wordsRecv[i][j].count;
+				index = indexOf(wordsTotal, wordsRecv[i][j].parola, dim);															//cerco nell'array se è già presente la parola
+				if(index!=-1)								
+					wordsTotal[index].count+=wordsRecv[i][j].count;																	//se sì, incremento il suo contatore
+				else{			
+					dim++;																											//se no, incremento la size e aggiungo gli elementi agli array
+					wordsTotal = (Word*) realloc(wordsTotal, dim * sizeof(Word));											
+					strcpy(wordsTotal[dim-1].parola, wordsRecv[i][j].parola);		
+					wordsTotal[dim-1].count = wordsRecv[i][j].count;
+				}
+			}
+		}
+		/*for(int i=0; i<p; i++){
 			printf("Processo: %d\n",i);
 			for(int j=0; j<sizeRecv[i]; j++){
 				printf("Parola: %s - counts: %d\n",wordsRecv[i][j].parola,wordsRecv[i][j].count);
 			}
+		}*/
+		printf("Parole totali: \n");
+		for(int i=0; i<dim; i++){
+			printf("Parola: %s - counts: %d\n",wordsTotal[i].parola,wordsTotal[i].count);
 		}
+		index = indexOf(wordsTotal, "tomatoes", dim);
+		printf("Parola: %s - counts: %d\n",wordsTotal[index].parola,wordsTotal[index].count);
+		printf("Total words: %d - different words: %d\n",totalWords,dim);
 	}
-
 	MPI_Type_free(&parolatype);
     MPI_Type_free(&wordtype);
-	free(words);
+	if(myrank==0)
+		free(wordsTotal);
 	free(myFiles);
+	
+	
+
+
+
+
+	MPI_Barrier(MPI_COMM_WORLD);
+	if(myrank==0){
+		gettimeofday(&end, 0);
+		elapsed = (end.tv_sec - start.tv_sec) * 1000.0f + (end.tv_usec - start.tv_usec) / 1000.0f;
+		printf("Code executed in %.2f milliseconds.\n", elapsed);
+	}
 	MPI_Finalize();
 }
 
@@ -117,7 +161,7 @@ Word* chunkAndCount(int myrank, int totalByte, fileStats* myFiles, int countFile
 	int inizio = (myrank<resto) ? (byteProcess + 1) * myrank : resto + (byteProcess * myrank);				//da che byte parto (riferito ai byte totali da elaborare)
 	int fine = (myrank<resto) ? (byteProcess + 1) * (myrank + 1) : resto + (byteProcess * (myrank + 1));	//a che byte arrivo (riferito ai byte totali da elaborare)
 	printf("Byte totali: %d, Byte per process: %d, resto: %d\n",totalByte,byteProcess,resto);
-	MPI_Barrier(MPI_COMM_WORLD);
+	//MPI_Barrier(MPI_COMM_WORLD);
 	printf("Processore: %d, Byte inizio totali: %d - Byte fine totali: %d\n",myrank,inizio,fine);
 	int inizioFile = 0, fineFile = 0;																		//da che file parto a che file arrivo
 	for(int i = 0; i<countFiles; i++){
@@ -185,7 +229,6 @@ Word* wordCount(int inizio, int inizioFile, int fineFile, int resto, int bytePro
 						if(salto)								//se non devo leggere la parola
 							continue;							//vado alla prossima iterazione perché la parola è già stata analizzata
 						
-						int flag = 0;
 						int i = indexOf(words, str, *size);		//cerco nell'array se è già presente la parola
 						if(i!=-1)								
 							words[i].count++;					//se sì, incremento il suo contatore
@@ -201,8 +244,8 @@ Word* wordCount(int inizio, int inizioFile, int fineFile, int resto, int bytePro
 			}
 			fclose(file);
 		}
-		MPI_Barrier(MPI_COMM_WORLD);
-		sleep(myrank);
+		//MPI_Barrier(MPI_COMM_WORLD);
+		//sleep(myrank);
 		/*printf("Processo: %d \n",myrank);
 		for(int i=0; i<*size; i++){
 			printf("Parola: %s - counts: %d\n",words[i].parola,words[i].count);

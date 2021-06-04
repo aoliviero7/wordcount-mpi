@@ -10,7 +10,7 @@
 #include <wctype.h>
 #include <locale.h>
 
-#define NELEM 25
+#define NELEM 25000
 
 int main(int argc, char *argv[])  {
     int numtasks, rank, source=0, dest, tag=1, i;
@@ -67,31 +67,31 @@ int main(int argc, char *argv[])  {
             printf("hi %d\n",i);
             Words[i].count = i * 10;
         }
-        /*
+        
         printf("rank %d ora invio\n",rank);
             MPI_Send(Words, NELEM, Wordtype, 1, tag, MPI_COMM_WORLD);
-        */
         
+        /*
         int position = 0;
         printf("rank %d ora packo\n",rank);
-        /* now let's pack all those values into a single message */
+        /* now let's pack all those values into a single message *//*
         for (i=0; i<NELEM; i++) 
             MPI_Pack(&Words[i], 1, Wordtype, message, NELEM * size, &position, MPI_COMM_WORLD);
         printf("rank %d ora invio\n",rank);
-        MPI_Send(message, NELEM*size, MPI_PACKED, 1, 1, MPI_COMM_WORLD);
+        MPI_Send(message, NELEM*size, MPI_PACKED, 1, 1, MPI_COMM_WORLD);*/
     }else{
-        
+        /*
         printf("rank %d ora ricevo\n",rank);
         MPI_Recv(message, NELEM*size, MPI_PACKED, 0, 1, MPI_COMM_WORLD, NULL);
         printf("rank %d ora unpacko\n",rank);
         int position = 0;
         for (i=0; i<NELEM; i++) 
             MPI_Unpack(message, NELEM * size, &position, &p[i], 1, Wordtype, MPI_COMM_WORLD);
+        */
         
-        /*
         // all tasks receive Wordtype data
         MPI_Recv(p, NELEM, Wordtype, source, tag, MPI_COMM_WORLD, &stat);
-        */
+        
 
         for (i=0; i<NELEM; i++) 
             printf("rank= %d   %s %d\n", rank, p[i].parola, p[i].count);
