@@ -79,36 +79,42 @@ int main(int argc, char** argv) {
 	int sizeWord;								
     MPI_Type_size(wordtype, &sizeWord);													//dimensione di una singola Word
 
-	Word *wordsRecv;																	//array degli istogrammi locali dei processi
-	wordsRecv = (Word *) malloc(p * max * sizeof(Word));
-	int displacements[p];																//variabili richieste per l'invio
+	char sendMessage[size * sizeWord];													//pacchetto che ogni processo invia al master
+	char recvMessage[sizeTotal * sizeWord];												//pacchetto che riceve il master (pacchetti singoli concatenati)
+	Word wordsRecv[p][max];																//array degli istogrammi locali dei processi
+	int displacements[p], sizeMessage[p], sizeMessageRecv = 0, position = 0;			//variabili richieste per l'invio
 	if(myrank==0){
 		for(int i=0; i<p; i++){															//il master calcola indici e dimensioni
-			displacements[i] = (i==0) ? 0 : displacements[i-1] + sizeRecv[i-1];
+			sizeMessage[i] = sizeRecv[i] * sizeWord;
+			sizeMessageRecv += sizeMessage[i];
+			displacements[i] = (i==0) ? 0 : displacements[i-1] + sizeMessage[i-1];
 		}
 	}
-	MPI_Gatherv(words, size, wordtype, wordsRecv, sizeRecv, displacements, wordtype, 0, MPI_COMM_WORLD);	//si inviano tutti i dati al master
+    for (int i=0; i<size; i++) 															//ogni processo fa MPI_Pack dei suoi dati calcolati
+        MPI_Pack(&words[i], 1, wordtype, sendMessage, sizeWord*size, &position, MPI_COMM_WORLD);
 	free(words);
+	MPI_Gatherv(sendMessage, sizeWord*size, MPI_PACKED, recvMessage, sizeMessage, displacements, MPI_PACKED, 0, MPI_COMM_WORLD);	//si inviano tutti i dati al master
 	Word *wordsTotal;
 	int totalWords = 0;
 	if(myrank==0){
 		wordsTotal = (Word *) malloc(sizeof(Word));
 		int dim = 0, index = 0;
+		position = 0;
 		for (int i=0; i<p; i++){
 			for (int j=0; j<sizeRecv[i]; j++){
-				totalWords+=wordsRecv[i*sizeRecv[i]+j].count;
-				index = indexOf(wordsTotal, wordsRecv[i*sizeRecv[i]+j].parola, dim);															//cerco nell'array se è già presente la parola
+				MPI_Unpack(recvMessage, sizeMessageRecv, &position, &wordsRecv[i][j], 1, wordtype, MPI_COMM_WORLD);					//il master spacchetta tutti i dati
+				totalWords+=wordsRecv[i][j].count;
+				index = indexOf(wordsTotal, wordsRecv[i][j].parola, dim);															//cerco nell'array se è già presente la parola
 				if(index!=-1)								
-					wordsTotal[index].count+=wordsRecv[i*sizeRecv[i]+j].count;																	//se sì, incremento il suo contatore
+					wordsTotal[index].count+=wordsRecv[i][j].count;																	//se sì, incremento il suo contatore
 				else{			
 					dim++;																											//se no, incremento la size e aggiungo gli elementi agli array
 					wordsTotal = (Word*) realloc(wordsTotal, dim * sizeof(Word));											
-					strcpy(wordsTotal[dim-1].parola, wordsRecv[i*sizeRecv[i]+j].parola);		
-					wordsTotal[dim-1].count = wordsRecv[i*sizeRecv[i]+j].count;
+					strcpy(wordsTotal[dim-1].parola, wordsRecv[i][j].parola);		
+					wordsTotal[dim-1].count = wordsRecv[i][j].count;
 				}
 			}
 		}
-		free(wordsRecv);
 		/*for(int i=0; i<p; i++){
 			printf("Processo: %d\n",i);
 			for(int j=0; j<sizeRecv[i]; j++){
