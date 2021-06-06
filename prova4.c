@@ -27,13 +27,9 @@ int indexOf(Word *words, char* str, int size);
 fileStats* fileScan(int* countFiles, int* totalByte);
 
 int main(int argc, char** argv) {
-	struct timeval start;
-   	struct timeval end;
+	struct timeval start, end;		//per misurare il tempo
    	float elapsed;
 	gettimeofday(&start, 0);
-
-
-
 
 	MPI_Init(NULL, NULL);			//inizializzo MPI
     int myrank,p=0;
@@ -72,61 +68,53 @@ int main(int argc, char** argv) {
     MPI_Type_get_extent(parolatype, &lb, &extent);										//setup count
     offsets[1] = extent;
     oldtypes[1] = MPI_INT;
-    blockcounts[1] = 2;
+    blockcounts[1] = 1;
     MPI_Type_create_struct(2, blockcounts, offsets, oldtypes, &wordtype);				//definizione struttura Word
     MPI_Type_commit(&wordtype);
-	
-	int sizeWord;								
-    MPI_Type_size(wordtype, &sizeWord);													//dimensione di una singola Word
 
 	Word *wordsRecv;																	//array degli istogrammi locali dei processi
-	wordsRecv = (Word *) malloc(p * max * sizeof(Word));
+	wordsRecv = (Word *) malloc(sizeTotal * sizeof(Word));
 	int displacements[p];																//variabili richieste per l'invio
-	if(myrank==0){
+	if(myrank==0)
 		for(int i=0; i<p; i++){															//il master calcola indici e dimensioni
 			displacements[i] = (i==0) ? 0 : displacements[i-1] + sizeRecv[i-1];
+			printf("displacements[%d]: %d\n",i,displacements[i]);
 		}
-	}
 	MPI_Gatherv(words, size, wordtype, wordsRecv, sizeRecv, displacements, wordtype, 0, MPI_COMM_WORLD);	//si inviano tutti i dati al master
 	free(words);
 	Word *wordsTotal;
 	int totalWords = 0;
 	if(myrank==0){
-		wordsTotal = (Word *) malloc(sizeof(Word));
+		/*wordsTotal = (Word *) malloc(sizeof(Word));
 		int dim = 0, index = 0;
-		for (int i=0; i<p; i++){
-			for (int j=0; j<sizeRecv[i]; j++){
-				totalWords+=wordsRecv[i*sizeRecv[i]+j].count;
-				index = indexOf(wordsTotal, wordsRecv[i*sizeRecv[i]+j].parola, dim);															//cerco nell'array se è già presente la parola
-				if(index!=-1)								
-					wordsTotal[index].count+=wordsRecv[i*sizeRecv[i]+j].count;																	//se sì, incremento il suo contatore
-				else{			
-					dim++;																											//se no, incremento la size e aggiungo gli elementi agli array
-					wordsTotal = (Word*) realloc(wordsTotal, dim * sizeof(Word));											
-					strcpy(wordsTotal[dim-1].parola, wordsRecv[i*sizeRecv[i]+j].parola);		
-					wordsTotal[dim-1].count = wordsRecv[i*sizeRecv[i]+j].count;
-				}
-			}
-		}
-		free(wordsRecv);
-		/*for(int i=0; i<p; i++){
-			printf("Processo: %d\n",i);
-			for(int j=0; j<sizeRecv[i]; j++){
-				printf("Parola: %s - counts: %d\n",wordsRecv[i][j].parola,wordsRecv[i][j].count);
+		for (int i=0; i<sizeTotal; i++){
+			totalWords+=wordsRecv[i].count;
+			index = indexOf(wordsTotal, wordsRecv[i].parola, dim);											//cerco nell'array se è già presente la parola
+			if(index!=-1)								
+				wordsTotal[index].count+=wordsRecv[i].count;												//se sì, incremento il suo contatore
+			else{			
+				dim++;																						//se no, incremento la size e aggiungo gli elementi agli array
+				wordsTotal = (Word*) realloc(wordsTotal, dim * sizeof(Word));											
+				strcpy(wordsTotal[dim-1].parola, wordsRecv[i].parola);		
+				wordsTotal[dim-1].count = wordsRecv[i].count;
 			}
 		}*/
-		printf("Parole totali: \n");
-		for(int i=0; i<dim; i++){
-			printf("Parola: %s - counts: %d\n",wordsTotal[i].parola,wordsTotal[i].count);
+		free(wordsRecv);
+		for(int i=0; i<sizeTotal; i++){
+				printf("Parola: %s - counts: %d\n",wordsRecv[i].parola,wordsRecv[i].count);
 		}
-		index = indexOf(wordsTotal, "tomatoes", dim);
-		printf("Parola: %s - counts: %d\n",wordsTotal[index].parola,wordsTotal[index].count);
-		printf("Total words: %d - different words: %d\n",totalWords,dim);
+		//printf("Parole totali: \n");
+		//for(int i=0; i<dim; i++){
+		//	printf("Parola: %s - counts: %d\n",wordsTotal[i].parola,wordsTotal[i].count);
+		//}
+		//index = indexOf(wordsTotal, "tomatoes", dim);
+		//printf("Parola: %s - counts: %d\n",wordsTotal[index].parola,wordsTotal[index].count);
+		//printf("Total words: %d - different words: %d\n",totalWords,dim);
 	}
 	MPI_Type_free(&parolatype);
     MPI_Type_free(&wordtype);
-	if(myrank==0)
-		free(wordsTotal);
+	///if(myrank==0)
+		//free(wordsTotal);
 	free(myFiles);
 	
 	
@@ -135,7 +123,7 @@ int main(int argc, char** argv) {
 
 
 	MPI_Barrier(MPI_COMM_WORLD);
-	if(myrank==0){
+	if(myrank==0){				//fine misurazione tempo
 		gettimeofday(&end, 0);
 		elapsed = (end.tv_sec - start.tv_sec) * 1000.0f + (end.tv_usec - start.tv_usec) / 1000.0f;
 		printf("Code executed in %.2f milliseconds.\n", elapsed);
@@ -240,10 +228,10 @@ Word* wordCount(int inizio, int inizioFile, int fineFile, int resto, int bytePro
 		}
 		//MPI_Barrier(MPI_COMM_WORLD);
 		//sleep(myrank);
-		/*printf("Processo: %d \n",myrank);
+		printf("Processo: %d \n",myrank);
 		for(int i=0; i<*size; i++){
 			printf("Parola: %s - counts: %d\n",words[i].parola,words[i].count);
-		}*/
+		}
 		//printf("Processo: %d - dimensione struct: %ld\n",myrank,(*size) * sizeof(Word));
 
 		return words;

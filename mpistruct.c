@@ -10,7 +10,7 @@
 #include <wctype.h>
 #include <locale.h>
 
-#define NELEM 12500
+#define NELEM 1
 
 int main(int argc, char *argv[])  {
     int numtasks=0, rank, source=0, dest, tag=1, i;
@@ -19,7 +19,7 @@ int main(int argc, char *argv[])  {
         char parola[100];
         int count;
     }Word;
-    Word     Words[NELEM];
+    
     MPI_Datatype Wordtype, oldtypes[2],parolatype;   // required variables
     int          blockcounts[2];
 
@@ -48,63 +48,43 @@ int main(int argc, char *argv[])  {
     //printf("lb: %ld extent:%ld\n",lb,extent);
     offsets[1] = 1 * extent;
     oldtypes[1] = MPI_INT;
-    blockcounts[1] = 2;
+    blockcounts[1] = 1;
 
     // define structured type and commit it
     MPI_Type_create_struct(2, blockcounts, offsets, oldtypes, &Wordtype);
     MPI_Type_commit(&Wordtype);
+    int sizeToSend = NELEM*(rank+1);
+    Word     Words[sizeToSend];
 
-    printf("hi \n");
-    for (i=0; i<NELEM; i++) {
+    for (i=0; i<sizeToSend; i++) {
         strcpy(Words[i].parola , "pippo");
         //printf("hi %d\n",i);
         Words[i].count = i * 10;
     }
     
-    printf("rank %d ora invio\n",rank);
-    
-    
     int size;
     MPI_Type_size(Wordtype, &size);
-    //printf("size %d\n",size);
-    char message[NELEM * size]; 
-    char p[numtasks * NELEM * size];
-    //Word recv[numtasks * NELEM];
-    Word recv[numtasks][NELEM];
-    /*p=calloc(numtasks, sizeof(char*));
-    if(p==NULL)
-        printf("null 1\n");
-    for (i=0; i<numtasks; i++) {
-        p[i]= calloc(NELEM, size);
-        if(p[i]==NULL)
-            printf("null 2\n");
-    }*/
-
     
-    int position = 0;
-    for (i=0; i<NELEM; i++) 
-        MPI_Pack(&Words[i], 1, Wordtype, message, NELEM *size, &position, MPI_COMM_WORLD);
-
-    MPI_Gather(message, NELEM*size, MPI_PACKED, p, NELEM*size, MPI_PACKED, 0, MPI_COMM_WORLD);
-    
-    position = 0;
-    for (i=0; i<numtasks; i++){
-        position = 0;
-        for (int j=0; j<NELEM; j++) 
-            MPI_Unpack(p, NELEM * size, &position, &recv[i][j], 1, Wordtype, MPI_COMM_WORLD);
-    }
-
+    int displacements[numtasks], count[numtasks], tot=0;																//variabili richieste per l'invio
+	if(rank==0)
+		for(int i=0; i<numtasks; i++){															//il master calcola indici e dimensioni
+			displacements[i] = (i==0) ? 0 : displacements[i-1] + (NELEM*i);
+            count[i] = (i+1) * NELEM;
+			printf("displacements[%d]: %d\n",i,displacements[i]);
+            printf("count[%d]: %d\n",i,count[i]);
+            tot+=count[i];
+            //tot+=NELEM;
+		}
+    printf("tot: %d\n",tot);
+    Word recv[tot];
+    MPI_Gatherv(Words, sizeToSend, Wordtype, recv, count, displacements, Wordtype, 0, MPI_COMM_WORLD);
     //MPI_Gather(Words, NELEM, Wordtype, recv, NELEM, Wordtype, 0, MPI_COMM_WORLD);
+    for (i=0; i<tot; i++){
+        printf("Parola: %s - counts: %d\n",recv[i].parola,recv[i].count);
+    }
+    
     MPI_Barrier(MPI_COMM_WORLD);
     
-    if(rank==0)
-        for (i=0; i<numtasks; i++) 
-            for (int j=0; j<NELEM; j++) 
-                printf("rank= %d   %s %d\n",i , recv[i][j].parola, recv[i][j].count);
-    //for (i=0; i<numtasks; i++) 
-    //    free(p[i]);
-    
-    //free(p);
     MPI_Type_free(&parolatype);
     MPI_Type_free(&Wordtype);
     MPI_Finalize();
