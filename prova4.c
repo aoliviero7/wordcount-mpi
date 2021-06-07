@@ -118,13 +118,13 @@ int main(int argc, char** argv) {
 
 
 	MPI_Barrier(MPI_COMM_WORLD);
-	if(myrank==0){				//fine misurazione tempo
-		gettimeofday(&end, 0);
+	if(myrank==0){				
+		gettimeofday(&end, 0);								//fine misurazione tempo
 		elapsed = (end.tv_sec - start.tv_sec) * 1000.0f + (end.tv_usec - start.tv_usec) / 1000.0f;
 		printf("Code executed in %.2f milliseconds.\n", elapsed);
-		qsort(wordsTotal,dim,sizeof(Word),compare);
+		qsort(wordsTotal,dim,sizeof(Word),compare);			//ordino i dati
 		FILE *fpt;
-		fpt = fopen("Results.csv", "w+");
+		fpt = fopen("Results.csv", "w+");					//e li scrivo su un file csv
 		fprintf(fpt,"Word, Count\n");
 		for(int i=0; i<dim; i++)
 			fprintf(fpt,"%s, %d\n",wordsTotal[i].parola,wordsTotal[i].count);
