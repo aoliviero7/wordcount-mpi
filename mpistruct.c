@@ -10,7 +10,7 @@
 #include <wctype.h>
 #include <locale.h>
 
-#define NELEM 1
+#define NELEM 2
 
 int main(int argc, char *argv[])  {
     int numtasks=0, rank, source=0, dest, tag=1, i;

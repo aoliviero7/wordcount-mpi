@@ -25,6 +25,7 @@ Word* chunkAndCount(int myrank, int totalByte, fileStats* myFiles, int countFile
 int getWord(FILE *file, char* str);
 int indexOf(Word *words, char* str, int size);
 fileStats* fileScan(int* countFiles, int* totalByte);
+int compare(const void * a, const void * b);
 
 int main(int argc, char** argv) {
 	struct timeval start, end;		//per misurare il tempo
@@ -55,6 +56,7 @@ int main(int argc, char** argv) {
 			if(sizeRecv[i]>max)
 				max = sizeRecv[i];
 		}
+		printf("[MASTER] Dimensione totale: %d \n",sizeTotal);
 	}
 	
 	MPI_Datatype wordtype, oldtypes[2], parolatype;   									//variabili richieste per la struttura
@@ -76,17 +78,16 @@ int main(int argc, char** argv) {
 	wordsRecv = (Word *) malloc(sizeTotal * sizeof(Word));
 	int displacements[p];																//variabili richieste per l'invio
 	if(myrank==0)
-		for(int i=0; i<p; i++){															//il master calcola indici e dimensioni
+		for(int i=0; i<p; i++)															//il master calcola indici e dimensioni
 			displacements[i] = (i==0) ? 0 : displacements[i-1] + sizeRecv[i-1];
-			printf("displacements[%d]: %d\n",i,displacements[i]);
-		}
-	MPI_Gatherv(words, size, wordtype, wordsRecv, sizeRecv, displacements, wordtype, 0, MPI_COMM_WORLD);	//si inviano tutti i dati al master
+			
+	MPI_Gatherv(words, size, wordtype, &wordsRecv[0], sizeRecv, displacements, wordtype, 0, MPI_COMM_WORLD);	//si inviano tutti i dati al master
 	free(words);
 	Word *wordsTotal;
-	int totalWords = 0;
+	int totalWords = 0, dim = 0;
 	if(myrank==0){
-		/*wordsTotal = (Word *) malloc(sizeof(Word));
-		int dim = 0, index = 0;
+		wordsTotal = (Word *) malloc(sizeof(Word));
+		int index = 0;
 		for (int i=0; i<sizeTotal; i++){
 			totalWords+=wordsRecv[i].count;
 			index = indexOf(wordsTotal, wordsRecv[i].parola, dim);											//cerco nell'array se è già presente la parola
@@ -98,27 +99,21 @@ int main(int argc, char** argv) {
 				strcpy(wordsTotal[dim-1].parola, wordsRecv[i].parola);		
 				wordsTotal[dim-1].count = wordsRecv[i].count;
 			}
-		}*/
-		free(wordsRecv);
-		for(int i=0; i<sizeTotal; i++){
-				printf("Parola: %s - counts: %d\n",wordsRecv[i].parola,wordsRecv[i].count);
 		}
-		//printf("Parole totali: \n");
-		//for(int i=0; i<dim; i++){
-		//	printf("Parola: %s - counts: %d\n",wordsTotal[i].parola,wordsTotal[i].count);
+		//for(int i=0; i<sizeTotal; i++){
+		//		printf("Parola: %s - counts: %d\n",wordsRecv[i].parola,wordsRecv[i].count);
 		//}
+		free(wordsRecv);
+		printf("Parole totali: \n");
+		for(int i=0; i<dim; i++){
+			printf("Parola: %s - counts: %d\n",wordsTotal[i].parola,wordsTotal[i].count);
+		}
 		//index = indexOf(wordsTotal, "tomatoes", dim);
 		//printf("Parola: %s - counts: %d\n",wordsTotal[index].parola,wordsTotal[index].count);
-		//printf("Total words: %d - different words: %d\n",totalWords,dim);
+		printf("Total words: %d - different words: %d\n",totalWords,dim);
 	}
 	MPI_Type_free(&parolatype);
     MPI_Type_free(&wordtype);
-	///if(myrank==0)
-		//free(wordsTotal);
-	free(myFiles);
-	
-	
-
 
 
 
@@ -127,7 +122,16 @@ int main(int argc, char** argv) {
 		gettimeofday(&end, 0);
 		elapsed = (end.tv_sec - start.tv_sec) * 1000.0f + (end.tv_usec - start.tv_usec) / 1000.0f;
 		printf("Code executed in %.2f milliseconds.\n", elapsed);
+		qsort(wordsTotal,dim,sizeof(Word),compare);
+		FILE *fpt;
+		fpt = fopen("Results.csv", "w+");
+		fprintf(fpt,"Word, Count\n");
+		for(int i=0; i<dim; i++)
+			fprintf(fpt,"%s, %d\n",wordsTotal[i].parola,wordsTotal[i].count);
+		fclose(fpt);
+		free(wordsTotal);
 	}
+	free(myFiles);
 	MPI_Finalize();
 }
 
@@ -193,9 +197,13 @@ Word* wordCount(int inizio, int inizioFile, int fineFile, int resto, int bytePro
 					if(countByte<byteProcess){					//non devo leggere di più di quanto mi tocca
 						char str[100]={};
 						int prima = ftell(file);
-						if(!getWord(file, str))					//prendo una parola	
-							continue;																
+						if(!getWord(file, str)){					//prendo una parola	(se non è una parola vado all'iterazione successiva aggiornando i byte letti)
+							int dopo = ftell(file);					
+							countByte+=(dopo-prima);	
+							continue;
+						}															
 						int dopo = ftell(file);
+						//printf("Dopo: %d - prima: %d \n",dopo,prima);
 						//printf("Stringa letta: %ls \n",str);
 						int salto = 0;												//flag che mi indica se la parola la devo saltare	
 						if(iFile == inizioFile && prima == inizio && inizio!=0){	//se sto leggendo la mia prima parola (prima==inizio) del primo file che mi è stato assegnato (iFile==inizioFile),
@@ -228,10 +236,12 @@ Word* wordCount(int inizio, int inizioFile, int fineFile, int resto, int bytePro
 		}
 		//MPI_Barrier(MPI_COMM_WORLD);
 		//sleep(myrank);
+		
 		printf("Processo: %d \n",myrank);
 		for(int i=0; i<*size; i++){
-			printf("Parola: %s - counts: %d\n",words[i].parola,words[i].count);
+			printf("[RANK %d]Parola: %s - counts: %d\n",myrank,words[i].parola,words[i].count);
 		}
+		
 		//printf("Processo: %d - dimensione struct: %ld\n",myrank,(*size) * sizeof(Word));
 
 		return words;
@@ -304,5 +314,9 @@ fileStats* fileScan(int* countFiles, int* totalByte){
 		printf("Directory non leggibile\n");
 	closedir(directory);
 	return myFiles;
+}
+
+int compare(const void * a, const void * b){
+	return ((Word*)b)->count - ((Word*)a)->count;
 }
 
