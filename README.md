@@ -27,13 +27,45 @@ My solution consists of:
 3. Each process calculates its local histogram and sends it to the master.
 4. The master process brings together the information received.
 
-Step. 1
+**Step. 1**
+
 In *fileScan()* function are scanned the files in the folder defined, and are calculated the total byte to be analyzed:
 - the directory is opened;
 - using *fseek()* you go to the end of the file;
 - using *ftell()* you take the position of the pointer (file size).
 
-Step. 2
-In *checkAndCount()* function are calculated byte to be analyzed for each process. 
+**Step. 2**
 
+In *chunkAndCount()* function are calculated byte to be analyzed for each process. Division by byte was chosen as the solution because dividing by words would generate more overhead for the initial count of them. Each process calculates this data to avoid unnecessary communication. Both how many bytes each process must analyze, and from which byte of which file it has to start reading and from which byte of which file it has to end are calculated.
+For example:
+> The process 3 must analyze and works 1000 bytes from byte 400 of file 5 up to 150 bytes of the file 7
+Clearly if the division of the total bytes to be analyzed on the number of processes is not perfect, the first "remainder" processors analyze an extra byte.
 
+**Step. 3**
+
+In *wordCount()* function each process analyzes its portion of the files and returns an array of the Word struct, consisting of the word and the number of its occurrences. The basic functioning of the algorithm is very simple: every time a process reads a word from the file it checks if it is present in its local array, if yes it increments its counter, if not it must add an extra block to the array, insert the word and initialize its counter to 1.
+
+Each word is read from the file through the *getWord()* function, which extracts the word by reading character by character, avoiding reading non-alphanumeric characters such as punctuation marks or whitespace; the word is returned with all lowercase characters to avoid mismatching problems between identical words. Using this technique, words separated by a punctuation mark, such as a hyphen, are treated as two different words.
+
+Since the portions to be analyzed have been divided according to bytes and not words, it is possible that a process ends in the middle of a word and consequently another starts in the middle of that word. This situation has been handled in such a way that the process that should end in the middle of the word reads it in its entirety and places it in its array, while the other process checks if it starts in the middle of a word, if yes it ignores it and goes to the next word, otherwise it processes it.
+
+**Step. 4**
+
+Whenever a process finishes processing its piece of data, it performs a *MPI_Gather* to tell the master the size of its local array. The MPI type is created for the Word structure and then, via *MPI_Gatherv*, all the data of the slaves are collected from the master. The same words received from different processes are grouped, and finally the resulting array is sorted in descending order of the word frequencies and a csv file is created for the output. The file is called ***ResultsParallel.csv***.
+
+## Local Execution
+
+Inside the ***wordcount-mpi*** directory run the following command:
+
+    mpirun -np NUMBER_OF_PROCESSORS wordcount 
+
+Add *--allow-run-as-root* and *--oversubscribe*, if necessary:
+
+    mpirun -np --allow-run-as-root --oversubscribe NUMBER_OF_PROCESSORS wordcount 
+
+In this way you can run the program and count word of the files into ***wordcount-mpi/txt*** folder; if you would like to try different input .txt files, you can replace the ones already present.
+
+## Sequential Solution
+
+Inside the ***wordcount-mpi*** directory there is a file called ***sequential.c*** that allows you to run the same algorithm implemented in the described solution, but without all those features that generate overhead such as: the byte count of each file, the calculation of which portion of the files to analyze, the grouping of information by the master and in general all communication. The file that will be generated is called ***ResultSequential.csv***
+This is to be able to compare the results obtained more correctly.
