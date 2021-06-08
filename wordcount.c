@@ -8,7 +8,7 @@
 #include <ctype.h>
 #include <sys/time.h>
 
-#define FOLDER "txt/try"
+#define FOLDER "txt"
 
 typedef struct{
 	char name[100];
