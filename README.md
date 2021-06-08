@@ -53,4 +53,19 @@ Since the portions to be analyzed have been divided according to bytes and not w
 
 Whenever a process finishes processing its piece of data, it performs a *MPI_Gather* to tell the master the size of its local array. The MPI type is created for the Word structure and then, via *MPI_Gatherv*, all the data of the slaves are collected from the master. The same words received from different processes are grouped, and finally the resulting array is sorted in descending order of the word frequencies and a csv file is created for the output.
 
+## Local Execution
 
+Inside the ***wordcount-mpi*** directory run the following command:
+
+    mpirun -np NUMBER_OF_PROCESSORS wordcount 
+
+Add *--allow-run-as-root* and *--oversubscribe*, if necessary:
+
+    mpirun -np --allow-run-as-root --oversubscribe NUMBER_OF_PROCESSORS wordcount 
+
+In this way you can run the program and count word of the files into ***wordcount-mpi/txt*** folder; if you would like to try different input .txt files, you can replace the ones already present.
+
+## Sequential Solution
+
+Inside the ***wordcount-mpi*** directory there is a file called **sequenziale.c** that allows you to run the same algorithm implemented in the described solution, but without all those features that generate overhead such as: the byte count of each file, the calculation of which portion of the files to analyze, the grouping of information by the master and in general all communication.
+This is to be able to compare the results obtained more correctly.
