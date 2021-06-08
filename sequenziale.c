@@ -17,6 +17,7 @@ typedef struct{
 
 int indexOf(Word *words, char* str, int size);
 int getWord(FILE *file, char* str);
+int compare(const void * a, const void * b);
 
 int main(int argc, char** argv) {
 	struct timeval start;
@@ -28,7 +29,7 @@ int main(int argc, char** argv) {
 	struct dirent *Dirent;
 	Word* words;
 	words = (Word*) malloc(sizeof(Word));
-	int size = 0;
+	int size = 0, totalWords = 0;
 	
 	directory = opendir(FOLDER);
 	if(directory){
@@ -45,7 +46,7 @@ int main(int argc, char** argv) {
 						char str[100]={};
 						if(!getWord(file, str))					//prendo una parola	
 							continue;
-						
+						totalWords++;
 						int index = 0;
 						int i = indexOf(words, str, size);		//cerco nell'array se è già presente la parola
 						if(i!=-1)								
@@ -60,18 +61,29 @@ int main(int argc, char** argv) {
 				}
 				fclose(file);
 			}
-		}
+		}/*
 		for(int i=0; i<size; i++){
 			printf("Parola: %s - counts: %d\n",words[i].parola,words[i].count);
-		}
+		}*/
+		printf("Total words: %d - different words: %d\n",totalWords,size);
 	}
 	else
 		printf("Directory non leggibile\n");
-	free(words);
 	closedir(directory);
+	
+	qsort(words,size,sizeof(Word),compare);						//ordino i dati
+	FILE *fpt;
+	fpt = fopen("ResultsSequential.csv", "w+");					//e li scrivo su un file csv
+	fprintf(fpt,"Word, Count\n");
+	for(int i=0; i<size; i++)
+		fprintf(fpt,"%s, %d\n",words[i].parola,words[i].count);
+
 	gettimeofday(&end, 0);
 	elapsed = (end.tv_sec - start.tv_sec) * 1000.0f + (end.tv_usec - start.tv_usec) / 1000.0f;
 	printf("Code executed in %.2f milliseconds.\n", elapsed);
+
+	free(words);
+	fclose(fpt);
 }
 
 int indexOf(Word *words, char* str, int size){
@@ -94,3 +106,6 @@ int getWord(FILE *file, char* str){
 	return i;
 }
 
+int compare(const void * a, const void * b){
+	return ((Word*)b)->count - ((Word*)a)->count;
+}

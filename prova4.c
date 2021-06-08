@@ -51,12 +51,12 @@ int main(int argc, char** argv) {
 	MPI_Gather(&size, 1, MPI_INT, sizeRecv, 1, MPI_INT, 0, MPI_COMM_WORLD);				//comunico al master le dimensioni di ogni array di Word locale
 	if(myrank==0){
 		for(int i=0; i<p; i++){
-			printf("[MASTER] Dimensione: %d - rank: %d\n",sizeRecv[i],i);
+			//printf("[MASTER] Dimensione: %d - rank: %d\n",sizeRecv[i],i);
 			sizeTotal += sizeRecv[i];
 			if(sizeRecv[i]>max)
 				max = sizeRecv[i];
 		}
-		printf("[MASTER] Dimensione totale: %d \n",sizeTotal);
+		//printf("[MASTER] Dimensione totale: %d \n",sizeTotal);
 	}
 	
 	MPI_Datatype wordtype, oldtypes[2], parolatype;   									//variabili richieste per la struttura
@@ -101,10 +101,10 @@ int main(int argc, char** argv) {
 			}
 		}
 		free(wordsRecv);
-		printf("Parole totali: \n");
+		/*printf("Parole totali: \n");
 		for(int i=0; i<dim; i++){
 			printf("Parola: %s - counts: %d\n",wordsTotal[i].parola,wordsTotal[i].count);
-		}
+		}*/
 		printf("Total words: %d - different words: %d\n",totalWords,dim);
 	}
 	MPI_Type_free(&parolatype);
@@ -114,15 +114,15 @@ int main(int argc, char** argv) {
 
 	MPI_Barrier(MPI_COMM_WORLD);
 	if(myrank==0){				
-		gettimeofday(&end, 0);								//fine misurazione tempo
-		elapsed = (end.tv_sec - start.tv_sec) * 1000.0f + (end.tv_usec - start.tv_usec) / 1000.0f;
-		printf("Code executed in %.2f milliseconds.\n", elapsed);
 		qsort(wordsTotal,dim,sizeof(Word),compare);			//ordino i dati
 		FILE *fpt;
-		fpt = fopen("Results.csv", "w+");					//e li scrivo su un file csv
+		fpt = fopen("ResultsParallel.csv", "w+");			//e li scrivo su un file csv
 		fprintf(fpt,"Word, Count\n");
 		for(int i=0; i<dim; i++)
 			fprintf(fpt,"%s, %d\n",wordsTotal[i].parola,wordsTotal[i].count);
+		gettimeofday(&end, 0);								//fine misurazione tempo
+		elapsed = (end.tv_sec - start.tv_sec) * 1000.0f + (end.tv_usec - start.tv_usec) / 1000.0f;
+		printf("Code executed in %.2f milliseconds.\n", elapsed);
 		fclose(fpt);
 		free(wordsTotal);
 	}
@@ -141,9 +141,9 @@ Word* chunkAndCount(int myrank, int totalByte, fileStats* myFiles, int countFile
 	int byteProcess = totalByte / p;																		
 	int inizio = (myrank<resto) ? (byteProcess + 1) * myrank : resto + (byteProcess * myrank);				//da che byte parto (riferito ai byte totali da elaborare)
 	int fine = (myrank<resto) ? (byteProcess + 1) * (myrank + 1) : resto + (byteProcess * (myrank + 1));	//a che byte arrivo (riferito ai byte totali da elaborare)
-	printf("Byte totali: %d, Byte per process: %d, resto: %d\n",totalByte,byteProcess,resto);
+	//printf("Byte totali: %d, Byte per process: %d, resto: %d\n",totalByte,byteProcess,resto);
 	//MPI_Barrier(MPI_COMM_WORLD);
-	printf("Processore: %d, Byte inizio totali: %d - Byte fine totali: %d\n",myrank,inizio,fine);
+	//printf("Processore: %d, Byte inizio totali: %d - Byte fine totali: %d\n",myrank,inizio,fine);
 	int inizioFile = 0, fineFile = 0;																		//da che file parto a che file arrivo
 	for(int i = 0; i<countFiles; i++){
 		if(inizio<=myFiles[i].size){
@@ -159,7 +159,7 @@ Word* chunkAndCount(int myrank, int totalByte, fileStats* myFiles, int countFile
 		}else
 			fine -= myFiles[i].size;																		//a che byte arrivo (riferito al file, es: byte 150 del file 7)
 	}
-	printf("Processore: %d, File inizio: %d, Byte: %d - File fine: %d, Byte: %d\n",myrank,inizioFile,inizio,fineFile,fine);
+	//printf("Processore: %d, File inizio: %d, Byte: %d - File fine: %d, Byte: %d\n",myrank,inizioFile,inizio,fineFile,fine);
 	
 	return wordCount(inizio, inizioFile, fineFile, resto, byteProcess, myFiles, myrank, size);
 }
@@ -176,7 +176,7 @@ Word* wordCount(int inizio, int inizioFile, int fineFile, int resto, int bytePro
 	Word* words;
 	words = (Word*) malloc(sizeof(Word));
 	byteProcess = (myrank<resto) ? byteProcess + 1 : byteProcess;
-	printf("Processore: %d, Devo leggere: %d Byte\n",myrank,byteProcess);
+	//printf("Processore: %d, Devo leggere: %d Byte\n",myrank,byteProcess);
 	
 	directory = opendir(FOLDER);
 	if(directory){
@@ -232,10 +232,10 @@ Word* wordCount(int inizio, int inizioFile, int fineFile, int resto, int bytePro
 		//MPI_Barrier(MPI_COMM_WORLD);
 		//sleep(myrank);
 		
-		printf("Processo: %d \n",myrank);
+		/*printf("Processo: %d \n",myrank);
 		for(int i=0; i<*size; i++){
 			printf("[RANK %d]Parola: %s - counts: %d\n",myrank,words[i].parola,words[i].count);
-		}
+		}*/
 		
 		//printf("Processo: %d - dimensione struct: %ld\n",myrank,(*size) * sizeof(Word));
 
