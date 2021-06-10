@@ -39,6 +39,7 @@ In *fileScan()* function are scanned the files in the folder defined, and are ca
 In *chunkAndCount()* function are calculated byte to be analyzed for each process. Division by byte was chosen as the solution because dividing by words would generate more overhead for the initial count of them. Each process calculates this data to avoid unnecessary communication. Both how many bytes each process must analyze, and from which byte of which file it has to start reading and from which byte of which file it has to end are calculated.
 For example:
 > The process 3 must analyze and works 1000 bytes from byte 400 of file 5 up to 150 bytes of the file 7
+
 Clearly if the division of the total bytes to be analyzed on the number of processes is not perfect, the first "remainder" processors analyze an extra byte.
 
 **Step. 3**
