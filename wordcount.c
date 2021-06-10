@@ -40,24 +40,18 @@ int main(int argc, char** argv) {
 
 	int countFiles = 0, totalByte = 0;
 	fileStats *myFiles = fileScan(&countFiles, &totalByte);								//calcolo numero di file e dimensioni
-	//printf("count file %d, totalB %d\n", countFiles, totalByte);
 	if(myrank==0)
 		for(int i=0; i<countFiles; i++)
 			printf("Nome file %d: %s, Byte %d\n", i, myFiles[i].name, myFiles[i].size);
 	
 	int size = 0;																		//dimensione dell'array di Word che calcolerò
 	Word* words = chunkAndCount(myrank, totalByte, myFiles, countFiles, p, &size);		//calcolo l'array di word della mia porzione di byte
-	int sizeRecv[p], sizeTotal = 0, max = 0;
+	int sizeRecv[p], sizeTotal = 0;
 	MPI_Gather(&size, 1, MPI_INT, sizeRecv, 1, MPI_INT, 0, MPI_COMM_WORLD);				//comunico al master le dimensioni di ogni array di Word locale
-	if(myrank==0){
-		for(int i=0; i<p; i++){
-			//printf("[MASTER] Dimensione: %d - rank: %d\n",sizeRecv[i],i);
+	if(myrank==0)
+		for(int i=0; i<p; i++)
 			sizeTotal += sizeRecv[i];
-			if(sizeRecv[i]>max)
-				max = sizeRecv[i];
-		}
-		//printf("[MASTER] Dimensione totale: %d \n",sizeTotal);
-	}
+	
 	
 	MPI_Datatype wordtype, oldtypes[2], parolatype;   									//variabili richieste per la struttura
     int blockcounts[2];
