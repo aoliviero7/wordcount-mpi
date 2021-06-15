@@ -24,13 +24,17 @@ Word* wordCount(int inizio, int inizioFile, int fineFile, int resto, int bytePro
 Word* chunkAndCount(int myrank, int totalByte, fileStats* myFiles, int countFiles, int p, int *size);
 int getWord(FILE *file, char* str);
 int indexOf(Word *words, char* str, int size);
-fileStats* fileScan(int* countFiles, int* totalByte);
+fileStats* fileScan(int* countFiles, int* totalByte, int maxfile);
 int compare(const void * a, const void * b);
 
 int main(int argc, char** argv) {
 	struct timeval start, end;		//inizio a misurare il tempo
    	float elapsed;
 	gettimeofday(&start, 0);
+
+	int maxfile=8;
+	if(argc==2)
+		maxfile=atoi(argv[1]);
 
 	MPI_Init(NULL, NULL);			//inizializzo MPI
     int myrank,p=0;
@@ -39,7 +43,7 @@ int main(int argc, char** argv) {
     MPI_Comm_size(MPI_COMM_WORLD, &p);
 
 	int countFiles = 0, totalByte = 0;
-	fileStats *myFiles = fileScan(&countFiles, &totalByte);								//calcolo numero di file e dimensioni
+	fileStats *myFiles = fileScan(&countFiles, &totalByte, maxfile);								//calcolo numero di file e dimensioni
 	if(myrank==0)
 		for(int i=0; i<countFiles; i++)
 			printf("Nome file %d: %s, Byte %d\n", i, myFiles[i].name, myFiles[i].size);
@@ -269,7 +273,7 @@ int indexOf(Word *words, char* str, int size){
 	Qui vengono calcolati i byte totali dei file da esaminare, il numero totale dei file
 	e nell'array di fileStats restituito si inserisce per ogli file il suo nome e la sua dimensione.
 */
-fileStats* fileScan(int* countFiles, int* totalByte){
+fileStats* fileScan(int* countFiles, int* totalByte, int maxfile){
 	DIR *directory;
 	FILE *file;
 	struct dirent *Dirent;
@@ -286,7 +290,8 @@ fileStats* fileScan(int* countFiles, int* totalByte){
 			char filepath[100] = FOLDER;
 			strcat(filepath, "/");
 			strcat(filepath, Dirent->d_name);
-			if(Dirent->d_type==8){											//regoular file
+			if(Dirent->d_type==8 && maxfile>0){								//regoular file
+				maxfile--;
 				file = fopen(filepath, "r");								//accedo in lettura
 				strcpy(myFiles[*countFiles].name,Dirent->d_name);			//salvo il nome
 				if(file){									
