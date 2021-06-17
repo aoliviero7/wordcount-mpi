@@ -184,5 +184,5 @@ As you can see from the graph, the execution time grows slightly, but steadily a
 
 From this other graph, however, it can be seen that, due to the times previously seen, also the efficiency has a similar behavior: it decreases slightly in a constant way as the number of processors increases. The reasons are the same, and here too there is a greater difference, of about 19%, between the use of 1 and 2 processors.
 
-##Conclusions
+## Conclusions
 The Word Count problem has been presented which consists in determining the word frequency of the input files. Then a parallel solution to the problem was provided using MPI, analyzing the approach used and the implementation code. Finally, the results in terms of Strong and Weak Scalability were analyzed on a cluster of 8 nodes implemented on AWS. The solution has shown excellent results with the use of up to 4 processors; subsequently, from 4 to 8 processors, the results can still be considered discrete.
