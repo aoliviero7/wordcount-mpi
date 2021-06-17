@@ -150,9 +150,12 @@ The input, which will remain constant for all executions, consists of 6.38 MB of
 
 The results obtained are reported below.
 
+![Strong Scalability Time Execution](/src/sstime.png)
 
 The graph show how execution times decrease as processes increase. The execution time falls inversely proportional to the increase of the processors involved; this up to 4 processes, after which it decreases more linearly. This behavior can be highlighted more with the charts relating to Speedup and Efficiency.
 
+![Strong Scalability Speedup](/src/ssspeedup.png)
+![Strong Scalability Efficiency](/src/ssefficiency.png)
 
 As previously mentioned, both the Speedup and the Efficiency are excellent up to 4 processors used, after which the performances improve in any case but in a less evident way, reaching in the worst case an efficiency of 63% and a Speedup value of 5.07 / 8.
 
@@ -171,8 +174,13 @@ The input will consist of a file of this type for each process involved:
 |:---------:	|:----:	|:----:	|:----:	|:----:	|:----:	|:----:	|:----:	|:----:	|
 |   Words   	| 25k 	| 50k 	| 75k 	| 100k 	| 125k 	| 150k 	| 175k 	| 200k 	|
 
+The results obtained are reported below.
+
+![Weak Scalability Time Execution](/src/wstime.png)
+
 As you can see from the graph, the execution time grows slightly, but steadily as the processors increase; this is due to the cost of communication between the various cluster nodes. In fact, it can be noted that the greatest time difference is obtained by passing from 1 (therefore no communication between different processors) to 2 processors involved.
 
+![Weak Scalability Efficiency](/src/wsefficiency.png)
 
 From this other graph, however, it can be seen that, due to the times previously seen, also the efficiency has a similar behavior: it decreases slightly in a constant way as the number of processors increases. The reasons are the same, and here too there is a greater difference, of about 19%, between the use of 1 and 2 processors.
 
