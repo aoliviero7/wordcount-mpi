@@ -15,11 +15,12 @@ We will be doing a version of map-reduce using MPI to perform word counting over
 Words entered in files can be up to 100 characters long. The approach used allows you to read words from a file, without constraints on how it must be formatted: for example, the words it contains do not have to be separated by the '\n' character, or by any other "special character"; simply one or more blank spaces, punctuation marks and so on.
 In this way, it is also possible to potentially analyze books, or text files of this type:
 
-> This is the law of jealousies, when a wife goeth aside to another
-> instead of her husband, and is defiled; or when the spirit of
-> jealousy cometh upon him, and he be jealous over his wife, and shall
-> set the woman before the LORD, and the priest shall execute upon her
-> all this law.
+> Nunc  fermentum,  arcu  sed  iaculis  ultrices,  enim  arcu  blandit  nibh,bibendum auctor nisi magna ac velit.  
+> Phasellus egestas vehicula la-cus nec tincidunt.  Pellentesque diam metus, vulputate eget faucibuseget, maximus at nulla.  
+> Nunc volutpat turpis vel leo sagittis, in con-dimentum eros aliquet.  Aliquam finibus, erat id hendrerit tincidunt,
+> mi  sapien  hendrerit  mauris,  vehicula  malesuada  turpis  turpis  quisest.    Fusce  sodales  condimentum  enim,  
+> et  placerat  metus  tempussed.   Phasellus  lectus  ante,  ullamcorper  at  placerat  ac,  scelerisquesed dolor.  
+> Nam egestas nibh eu risus convallis,  et ullamcorper odiofermentum.
 
 My solution consists of:
 1. Calculate the sum of the bytes of all the files to be analyzed.
@@ -54,7 +55,7 @@ Since the portions to be analyzed have been divided according to bytes and not w
 
 Whenever a process finishes processing its piece of data, it performs a *MPI_Gather* to tell the master the size of its local array. The MPI type is created for the Word structure and then, via *MPI_Gatherv*, all the data of the slaves are collected from the master. The same words received from different processes are grouped, and finally the resulting array is sorted in descending order of the word frequencies and a csv file is created for the output. The file is called ***ResultsParallel.csv***.
 
-## Local Execution
+## Parallel Execution
 
 Inside the ***wordcount-mpi*** directory run the following command:
 
@@ -70,3 +71,110 @@ In this way you can run the program and count word of the files into ***wordcoun
 
 Inside the ***wordcount-mpi*** directory there is a file called ***sequential.c*** that allows you to run the same algorithm implemented in the described solution, but without all those features that generate overhead such as: the byte count of each file, the calculation of which portion of the files to analyze, the grouping of information by the master and in general all communication. The file that will be generated is called ***ResultSequential.csv***
 This is to be able to compare the results obtained more correctly.
+Inside the ***wordcount-mpi*** directory run the following command:
+
+    sequential 
+
+## Results Correctness
+
+To analyze the results produced by the two solutions, parallel and sequential, both were performed on a wide range of inputs of different dimensions divided into one or more files. For a simple understanding, a short input file with relative output is shown.
+**Input:**
+
+> Nunc  fermentum,  arcu  sed  iaculis  ultrices,  enim  arcu  blandit  nibh,bibendum auctor nisi magna ac velit.  
+> Phasellus egestas vehicula la-cus nec tincidunt.  Pellentesque diam metus, vulputate eget faucibuseget, maximus at nulla.  
+> Nunc volutpat turpis vel leo sagittis, in con-dimentum eros aliquet.  Aliquam finibus, erat id hendrerit tincidunt,
+> mi  sapien  hendrerit  mauris,  vehicula  malesuada  turpis  turpis  quisest.    Fusce  sodales  condimentum  enim,  
+> et  placerat  metus  tempussed.   Phasellus  lectus  ante,  ullamcorper  at  placerat  ac,  scelerisquesed dolor.  
+> Nam egestas nibh eu risus convallis,  et ullamcorper odiofermentum.
+
+**Output:**
+
+    Word, Count
+    turpis, 3
+    nunc, 2
+    arcu, 2
+    enim, 2
+    nibh, 2
+    ac, 2
+    phasellus, 2
+    egestas, 2
+    vehicula, 2
+    tincidunt, 2
+    metus, 2
+    at, 2
+    hendrerit, 2
+    et, 2
+    placerat, 2
+    ullamcorper, 2
+    fermentum, 1
+    sed, 1
+    iaculis, 1
+    ...
+
+## Benchmark
+
+After analyzing the correctness of the proposed solution, we moved on to the testing and benchmarking phase on clusters. **Amazon Web Services** (**AWS**) was used which provides cloud computing services on an on-demand platform. 
+
+Two main metrics for performance evaluation were used for this phase, such as:
+***Speedup*** and ***Efficiency***.
+
+The *Speedup* is used to indicate the increase in performance between sequential execution and parallel execution, with the same input.
+
+The *Efficiency* is a normalization of the *Speedup* and serves to indicate how close the sequential and parallel execution times are, always with the same input.
+
+After defining the architecture used, the results will be displayed in terms of: 
+- Strong Scalability; 
+- Weak Scalability.
+
+### Architecture
+
+The benchmarks were performed on an AWS cluster of 8 t2.small instances, each with:
+- 1 vCPU
+- 2 GiB of RAM
+- Ubuntu Linux 18.04 LTS Server Edition - ami-0747bdcabd34c712a
+- 8 GiB EBS storage
+
+### Strong Scalability
+
+In Strong Scalability, the execution time of the program is calculated with constant input size, but with the variation of the number of processors.
+Let Tk be the execution time of the program on k processors and N the number of processors, are also calculated:
+- *Strong Scalability Speedup* = T1 / TN
+- *Strong Scalability Efficiency* = T1 / (N ∗ TN)
+
+The input, which will remain constant for all executions, consists of 6.38 MB of data divided into the following files:
+- *25k_1.txt* (175 KB): a file of about 25000 random words in English with allowed repetitions;
+- *The Hitchhikers Guide to the Galaxy.txt* (280 KB): a book by Douglas Adams;
+- *HP - The Chamber of Secrets.txt* (539 KB): the second chapter of the Harry Potter saga;
+- *HP - The Goblet of Fire.txt* (1.16 MB): the fourth chapter of the Harry Potter saga;
+- *Bible_KJV.txt* (4.24 MB): The King James Bible.
+
+The results obtained are reported below.
+
+
+The graph show how execution times decrease as processes increase. The execution time falls inversely proportional to the increase of the processors involved; this up to 4 processes, after which it decreases more linearly. This behavior can be highlighted more with the charts relating to Speedup and Efficiency.
+
+
+As previously mentioned, both the Speedup and the Efficiency are excellent up to 4 processors used, after which the performances improve in any case but in a less evident way, reaching in the worst case an efficiency of 63% and a Speedup value of 5.07 / 8.
+
+### Weak Scalability
+
+In Weak Scalability, the execution time of the program is calculated with the size of the input that grows proportionally to the number of nodes in the cluster.
+
+Let Tk be the execution time of the program on k processes, it is also calculated:
+
+*Weak Scalability Efficiency* = T1 / TN
+
+The input will consist of a file of this type for each process involved:
+- *25k_N.txt* (175 KB): a file of about 25000 random words in English with allowed repetitions.
+
+| Processes 	|  1  	|  2  	|  3  	|   4  	|   5  	|   6  	|   7  	|   8  	|
+|:---------:	|:----:	|:----:	|:----:	|:----:	|:----:	|:----:	|:----:	|:----:	|
+|   Words   	| 25k 	| 50k 	| 75k 	| 100k 	| 125k 	| 150k 	| 175k 	| 200k 	|
+
+As you can see from the graph, the execution time grows slightly, but steadily as the processors increase; this is due to the cost of communication between the various cluster nodes. In fact, it can be noted that the greatest time difference is obtained by passing from 1 (therefore no communication between different processors) to 2 processors involved.
+
+
+From this other graph, however, it can be seen that, due to the times previously seen, also the efficiency has a similar behavior: it decreases slightly in a constant way as the number of processors increases. The reasons are the same, and here too there is a greater difference, of about 19%, between the use of 1 and 2 processors.
+
+##Conclusions
+The Word Count problem has been presented which consists in determining the word frequency of the input files. Then a parallel solution to the problem was provided using MPI, analyzing the approach used and the implementation code. Finally, the results in terms of Strong and Weak Scalability were analyzed on a cluster of 8 nodes implemented on AWS. The solution has shown excellent results with the use of up to 4 processors; subsequently, from 4 to 8 processors, the results can still be considered discrete.
